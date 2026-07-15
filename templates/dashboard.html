@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mulun WAF 管理面板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+.header{background:#1e293b;padding:16px 24px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:16px}
+.header h1{font-size:18px;font-weight:600;color:#38bdf8}
+.header span{color:#64748b;font-size:12px}
+.container{padding:20px;max-width:1400px;margin:0 auto}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.card{background:#1e293b;border-radius:8px;padding:16px;border:1px solid #334155}
+.card .num{font-size:28px;font-weight:700}
+.card .lbl{font-size:12px;color:#64748b;margin-top:4px}
+.card.allow .num{color:#22c55e}
+.card.monitor .num{color:#eab308}
+.card.block .num{color:#ef4444}
+.card.ml .num{color:#38bdf8}
+.card.rule .num{color:#a78bfa}
+
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.panel{background:#1e293b;border-radius:8px;border:1px solid #334155;overflow:hidden}
+.panel-hd{padding:12px 16px;border-bottom:1px solid #334155;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.panel-bd{padding:12px 16px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 6px;border-bottom:1px solid #334155;color:#64748b;font-weight:500;font-size:11px;text-transform:uppercase}
+td{padding:6px;border-bottom:1px solid #1a2332;font-family:monospace}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-allow{background:#052e16;color:#22c55e}
+.badge-monitor{background:#422006;color:#eab308}
+.badge-block{background:#450a0a;color:#ef4444}
+.badge-rule{background:#2e1065;color:#a78bfa}
+.badge-ml{background:#0c4a6e;color:#38bdf8}
+.badge-low{background:#1e293b;color:#94a3b8}
+.badge-medium{background:#422006;color:#eab308}
+.badge-high{background:#450a0a;color:#ef4444}
+.badge-critical{background:#7f1d1d;color:#fca5a5}
+
+.form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+input,select{background:#0f172a;border:1px solid #334155;border-radius:4px;padding:6px 10px;color:#e2e8f0;font-size:13px;outline:none}
+input:focus{border-color:#38bdf8}
+input[type=text]{flex:1;min-width:120px}
+button{background:#2563eb;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:13px}
+button:hover{background:#1d4ed8}
+button.danger{background:#dc2626}
+button.danger:hover{background:#b91c1c}
+button.sm{background:#334155;padding:3px 8px;font-size:11px}
+button.sm:hover{background:#475569}
+button.green{background:#16a34a}
+
+.panel-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px}
+.rule-item{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #1a2332;font-size:12px}
+.rule-item:last-child{border:none}
+.rule-item input[type=checkbox]{margin-right:8px}
+.ip-list{margin-top:8px}
+.ip-item{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:#0f172a;border-radius:4px;margin-bottom:4px;font-family:monospace;font-size:12px}
+.ip-item button{padding:2px 6px;font-size:11px}
+
+.chart-container{height:120px;margin:8px 0;position:relative}
+.tab-bar{display:flex;gap:4px;margin-bottom:12px}
+.tab-bar button{background:#334155;color:#94a3b8;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px}
+.tab-bar button.active{background:#2563eb;color:#fff}
+
+.test-res{background:#0f172a;border-radius:4px;padding:8px;margin-top:8px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow:auto}
+.empty-msg{color:#64748b;text-align:center;padding:20px;font-size:13px}
+
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛡 Mulun WAF</h1>
+  <span id="status">初始化中...</span>
+</div>
+<div class="container" id="app">
+
+<!-- 统计卡片 -->
+<div class="cards">
+  <div class="card allow"><div class="num" id="c-allow">-</div><div class="lbl">放行</div></div>
+  <div class="card monitor"><div class="num" id="c-monitor">-</div><div class="lbl">观察</div></div>
+  <div class="card block"><div class="num" id="c-block">-</div><div class="lbl">封禁</div></div>
+  <div class="card ml"><div class="num" id="c-ml">-</div><div class="lbl">ML 决策</div></div>
+  <div class="card rule"><div class="num" id="c-rule">-</div><div class="lbl">规则拦截</div></div>
+</div>
+
+<div class="grid2">
+  <!-- 左列：日志 + 测试 -->
+  <div>
+    <!-- 实时日志 -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-hd">
+        <span>📋 实时请求日志</span>
+        <span style="font-size:12px;color:#64748b"><span id="log-count">0</span> 条</span>
+      </div>
+      <div class="panel-bd" style="padding:0;max-height:400px;overflow-y:auto">
+        <table id="log-table">
+          <thead><tr><th>动作</th><th>来源</th><th>方法</th><th>路径</th><th>IP</th><th>原因</th><th>耗时</th></tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+        <div id="log-empty" class="empty-msg">暂无请求日志</div>
+      </div>
+    </div>
+
+    <!-- 测试控制台 -->
+    <div class="panel">
+      <div class="panel-hd">
+        <span>🔧 请求测试</span>
+        <span style="font-size:12px;color:#64748b">模拟 HTTP 请求测试 WAF 决策</span>
+      </div>
+      <div class="panel-bd">
+        <div class="form-row">
+          <select id="test-method" style="width:80px">
+            <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+          </select>
+          <input type="text" id="test-path" placeholder="路径，如 /api/login" value="/api/login">
+          <input type="text" id="test-ip" placeholder="源 IP" value="203.0.113.5">
+        </div>
+        <div class="form-row">
+          <input type="text" id="test-query" placeholder="查询参数，如 id=1' OR '1'='1" style="flex:2">
+        </div>
+        <div class="form-row">
+          <input type="text" id="test-body" placeholder="请求体" style="flex:2">
+        </div>
+        <div class="form-row">
+          <input type="text" id="test-detection" placeholder="检测引擎信号，如 {'sqli':0.9}" style="flex:2">
+          <button onclick="testRequest()">🚀 发送</button>
+          <button class="danger" onclick="clearTest()">清空</button>
+        </div>
+        <div id="test-result" class="test-res">点击「发送」测试 WAF 决策</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右列 -->
+  <div>
+    <!-- 5分钟时间线 -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-hd">
+        <span>📊 近 5 分钟趋势</span>
+      </div>
+      <div class="panel-bd">
+        <div class="chart-container"><canvas id="chart-timeline"></canvas></div>
+        <div style="display:flex;gap:16px;font-size:12px;color:#94a3b8;justify-content:center">
+          <span><span style="color:#22c55e">●</span> 放行 <span id="tl-allow">0</span></span>
+          <span><span style="color:#eab308">●</span> 观察 <span id="tl-monitor">0</span></span>
+          <span><span style="color:#ef4444">●</span> 封禁 <span id="tl-block">0</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IP 管理 -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-hd"><span>🌐 IP 管理</span></div>
+      <div class="panel-bd">
+        <div class="tab-bar">
+          <button class="active" onclick="switchIPTab('allow',this)">白名单</button>
+          <button onclick="switchIPTab('block',this)">黑名单</button>
+        </div>
+        <div class="form-row">
+          <input type="text" id="ip-input" placeholder="CIDR，如 192.168.1.0/24">
+          <button onclick="addIP()">添加</button>
+        </div>
+        <div class="ip-list" id="ip-list"></div>
+      </div>
+    </div>
+
+    <!-- 规则管理 -->
+    <div class="panel">
+      <div class="panel-hd"><span>📜 规则引擎</span></div>
+      <div class="panel-bd" id="rules-list" style="max-height:300px;overflow-y:auto;padding:8px 12px">
+        加载中...
+      </div>
+    </div>
+  </div>
+</div>
+
+<br>
+<div style="text-align:center;color:#475569;font-size:12px">
+  Mulun WAF — 侧枝决策引擎 &nbsp;|&nbsp; 
+  <button class="sm" onclick="resetAll()">重置统计</button>
+</div>
+</div>
+
+<script>
+// ── 状态 ──
+let chartTimeline = null;
+let currentIPTab = 'allow';
+
+// ── 加载统计 ──
+async function loadStats(){
+  const r = await fetch('/api/stats');
+  const d = await r.json();
+  const s = d.stats || {};
+  document.getElementById('c-allow').textContent = s.allowed || 0;
+  document.getElementById('c-monitor').textContent = s.monitored || 0;
+  document.getElementById('c-block').textContent = s.blocked || 0;
+  // 从最近的日志中计算 ML vs Rule
+  const mlCnt = (d.recent||[]).filter(x=>x.source==='ml').length;
+  const ruleCnt = (d.recent||[]).filter(x=>x.source==='rule').length;
+  document.getElementById('c-ml').textContent = mlCnt;
+  document.getElementById('c-rule').textContent = ruleCnt;
+  document.getElementById('status').textContent = '运行中 | ' + new Date().toLocaleTimeString();
+
+  // 时间线
+  const tl = d.timeline || {};
+  document.getElementById('tl-allow').textContent = tl.allow || 0;
+  document.getElementById('tl-monitor').textContent = tl.monitor || 0;
+  document.getElementById('tl-block').textContent = tl.block || 0;
+}
+
+// ── 日志渲染 ──
+function renderLog(entries){
+  const tb = document.getElementById('log-body');
+  const empty = document.getElementById('log-empty');
+  tb.innerHTML = '';
+  if(!entries || entries.length===0){
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  entries.forEach(e => {
+    const action = e.action || '?';
+    const source = e.source || 'ml';
+    const tm = e.time_ms ? e.time_ms.toFixed(1) + 'ms' : '';
+    const reason = (e.reason||'').substring(0,50);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="badge badge-${action.toLowerCase()}">${action}</span></td>
+      <td><span class="badge badge-${source}">${source}</span></td>
+      <td>${e.method||''}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${e.path||''}</td>
+      <td>${e.ip||''}</td>
+      <td style="color:#94a3b8;font-size:11px">${reason}</td>
+      <td style="color:#64748b">${tm}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  document.getElementById('log-count').textContent = entries.length;
+}
+
+// ── IP 管理 ──
+async function loadIPs(){
+  const r = await fetch('/api/ips');
+  const d = await r.json();
+  const list = currentIPTab === 'allow' ? (d.allowlist||[]) : (d.blocklist||[]);
+  const container = document.getElementById('ip-list');
+  if(list.length===0){
+    container.innerHTML = '<div class="empty-msg" style="padding:8px">暂无 ' + currentIPTab + ' 列表</div>';
+    return;
+  }
+  container.innerHTML = list.map(ip => `
+    <div class="ip-item">
+      <span>${ip}</span>
+      <button class="danger sm" onclick="removeIP('${ip}')">删除</button>
+    </div>
+  `).join('');
+}
+
+function switchIPTab(tab, btn){
+  document.querySelectorAll('.tab-bar button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentIPTab = tab;
+  loadIPs();
+}
+
+async function addIP(){
+  const cidr = document.getElementById('ip-input').value.trim();
+  if(!cidr) return;
+  await fetch('/api/ips', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({cidr, type: currentIPTab, action:'add'}),
+  });
+  document.getElementById('ip-input').value = '';
+  loadIPs();
+}
+
+async function removeIP(cidr){
+  await fetch('/api/ips', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({cidr, type: currentIPTab, action:'remove'}),
+  });
+  loadIPs();
+}
+
+// ── 规则管理 ──
+async function loadRules(){
+  const r = await fetch('/api/rules');
+  const d = await r.json();
+  const rules = d.rules || [];
+  const container = document.getElementById('rules-list');
+  container.innerHTML = rules.map(rule => `
+    <div class="rule-item">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" ${rule.enabled?'checked':''} onchange="toggleRule('${rule.id}',this.checked)">
+        <span style="color:#e2e8f0">${rule.name}</span>
+        <span class="badge badge-${rule.severity}">${rule.severity}</span>
+      </label>
+      <span style="color:#64748b;font-size:11px">${rule.description||''}</span>
+    </div>
+  `).join('');
+}
+
+async function toggleRule(id, enabled){
+  await fetch('/api/rules', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, enabled}),
+  });
+}
+
+// ── 测试请求 ──
+async function testRequest(){
+  const data = {
+    method: document.getElementById('test-method').value,
+    path: document.getElementById('test-path').value || '/',
+    query: document.getElementById('test-query').value || '',
+    body: document.getElementById('test-body').value || '',
+    ip: document.getElementById('test-ip').value || '203.0.113.5',
+  };
+  try {
+    const det = JSON.parse(document.getElementById('test-detection').value || '{}');
+    data.detections = det;
+  } catch(e){}
+
+  const r = await fetch('/api/decide', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data),
+  });
+  const res = await r.json();
+  document.getElementById('test-result').textContent = JSON.stringify(res, null, 2);
+}
+
+function clearTest(){
+  document.getElementById('test-path').value = '/';
+  document.getElementById('test-query').value = '';
+  document.getElementById('test-body').value = '';
+  document.getElementById('test-detection').value = '';
+}
+
+// ── 重置 ──
+async function resetAll(){
+  await fetch('/api/reset', {method:'POST'});
+  loadStats(); loadIPs();
+}
+
+// ── SSE 实时流 ──
+function connectSSE(){
+  const evtSource = new EventSource('/api/events');
+  evtSource.onmessage = (event) => {
+    if(event.data) {
+      try {
+        const d = JSON.parse(event.data);
+        if(d.keepalive) return;
+        // 有新的日志条目，刷新
+        loadStats();
+        fetch('/api/stats').then(r=>r.json()).then(d=>renderLog(d.recent));
+      } catch(e){}
+    }
+  };
+  evtSource.onerror = () => {
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+// ── 轮询更新（兜底） ──
+setInterval(() => {
+  fetch('/api/stats').then(r=>r.json()).then(d => {
+    loadStats();
+    renderLog(d.recent);
+  });
+}, 3000);
+
+// ── 初始化 ──
+async function init(){
+  await loadStats();
+  await loadIPs();
+  await loadRules();
+  const r = await fetch('/api/stats');
+  const d = await r.json();
+  renderLog(d.recent);
+  connectSSE();
+}
+init();
+</script>
+</body>
+</html>

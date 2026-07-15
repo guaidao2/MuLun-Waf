@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.log
+
+# Model weights (keep only released ones via git add -f)
+*.safetensors
+*.bin
+checkpoints/
+out/
+official_weight/
+
+# Data cache
+data/collected/
+data/logs/
+dataset/*.parquet
+dataset/*_labels.json
+
+# IDE / tools
+.reasonix/
+.lingma/
+.trae/
+.qoder/
+.codebuddy/
+
+# Team IP
+幕论IDS.zip
+
+# Backup
+backup_prev_train/
