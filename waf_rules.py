@@ -301,10 +301,10 @@ DEFAULT_RULES = [
     ], 'all', '检测已知扫描器'),
 
     # ═══ 速率限制 ═══
-    RateLimitRule('rate_01', '速率限制: 60秒100次', 'medium',
-                  max_requests=60, window_seconds=60),
-    RateLimitRule('rate_02', '速率限制: 10秒30次', 'high',
-                  max_requests=15, window_seconds=10),
+    RateLimitRule('rate_01', '速率限制: 60秒300次', 'medium',
+                  max_requests=300, window_seconds=60),
+    RateLimitRule('rate_02', '速率限制: 10秒50次', 'high',
+                  max_requests=50, window_seconds=10),
 
     # ═══ 头部检查 ═══
     HeaderRule('hdr_01', '缺少 User-Agent', 'low', 'missing_ua'),
